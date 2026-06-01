@@ -1,16 +1,9 @@
 import streamlit as st
-from PIL import Image
-from streamlit_drawable_canvas import st_canvas
+from PIL import Image, ImageDraw
 import io
-import base64
 
 # 版本資訊
-VERSION = "v0.1.5"
-
-def get_image_base64(img):
-    buffered = io.BytesIO()
-    img.save(buffered, format="PNG")
-    return "data:image/png;base64," + base64.b64encode(buffered.getvalue()).decode()
+VERSION = "v0.1.6"
 
 def main():
     st.set_page_config(page_title="Luciffar AI: Apocalypse Gallery", page_icon="🎨", layout="wide")
@@ -22,45 +15,44 @@ def main():
     uploaded_file = st.file_uploader("上傳禁書素材", type=["png", "jpg", "jpeg"])
     
     if uploaded_file:
-        img = Image.open(uploaded_file)
-        
-        # 限制大小以利顯示
-        max_width = 600
-        if img.width > max_width:
-            ratio = max_width / float(img.width)
-            img = img.resize((max_width, int(float(img.height) * ratio)), Image.Resampling.LANCZOS)
-        
+        img = Image.open(uploaded_file).convert("RGB")
         w, h = img.size
-        bg_image_str = get_image_base64(img)
+        
+        # 預設長方形設定為 1/5
+        default_rect_w = w / 5
+        default_rect_h = h / 5
+        default_x = (w - default_rect_w) / 2
+        default_y = (h - default_rect_h) / 2
 
-        st.write("調整紅框位置與大小：")
-        
-        # 簡化參數配置，移除不必要的 data 與 background_image 參數
-        canvas_result = st_canvas(
-            fill_color="rgba(255, 0, 0, 0.3)",
-            stroke_width=2,
-            stroke_color="#FF0000",
-            background_image_url=bg_image_str,
-            height=h,
-            width=w,
-            drawing_mode="transform",
-            key="canvas",
-            initial_drawing={
-                "version": "4.4.0",
-                "objects": [{
-                    "type": "rect",
-                    "left": w/2 - (w/10),
-                    "top": h/2 - (h/10),
-                    "width": w/5,
-                    "height": h/5,
-                    "fill": "rgba(255, 0, 0, 0.3)",
-                    "stroke": "#FF0000",
-                    "strokeWidth": 2
-                }]
-            }
-        )
-        
-        st.info("畫布已載入。")
+        col1, col2 = st.columns([2, 1])
+
+        with col2:
+            st.write("### 參數調整")
+            text_input = st.text_input("輸入文字：", "AAA")
+            rect_x = st.number_input("左上角 X 座標", value=int(default_x))
+            rect_y = st.number_input("左上角 Y 座標", value=int(default_y))
+            rect_w = st.number_input("寬度", value=int(default_rect_w))
+            rect_h = st.number_input("高度", value=int(default_rect_h))
+            
+            if st.button("生成禁忌畫作"):
+                img_draw = img.copy()
+                draw = ImageDraw.Draw(img_draw)
+                # 畫出提示框
+                draw.rectangle([rect_x, rect_y, rect_x + rect_w, rect_y + rect_h], outline="red", width=5)
+                # 畫出文字
+                draw.text((rect_x + 10, rect_y + 10), text_input, fill="red")
+                
+                st.session_state.result_img = img_draw
+                st.success("繪製完成！")
+
+        with col1:
+            st.image(img, caption="原始禁書頁面", use_column_width=True)
+            if "result_img" in st.session_state:
+                st.image(st.session_state.result_img, caption="最終效果", use_column_width=True)
+                
+                buf = io.BytesIO()
+                st.session_state.result_img.save(buf, format="PNG")
+                st.download_button("下載此畫作", data=buf.getvalue(), file_name="result.png")
 
     else:
         st.warning("請先上傳圖片。")
