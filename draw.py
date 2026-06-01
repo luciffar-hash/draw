@@ -1,9 +1,9 @@
 import streamlit as st
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 import io
 
 # 版本資訊
-VERSION = "v0.1.6"
+VERSION = "v0.1.7"
 
 def main():
     st.set_page_config(page_title="Luciffar AI: Apocalypse Gallery", page_icon="🎨", layout="wide")
@@ -31,16 +31,25 @@ def main():
             text_input = st.text_input("輸入文字：", "AAA")
             rect_x = st.number_input("左上角 X 座標", value=int(default_x))
             rect_y = st.number_input("左上角 Y 座標", value=int(default_y))
-            rect_w = st.number_input("寬度", value=int(default_rect_w))
-            rect_h = st.number_input("高度", value=int(default_rect_h))
+            rect_w = st.number_input("框框寬度", value=int(default_rect_w))
+            rect_h = st.number_input("框框高度", value=int(default_rect_h))
+            font_size = st.slider("字體大小", 20, 200, 60)
+            text_color = st.color_picker("選擇文字顏色", "#FF0000")
             
             if st.button("生成禁忌畫作"):
                 img_draw = img.copy()
                 draw = ImageDraw.Draw(img_draw)
-                # 畫出提示框
+                
+                # 1. 畫出紅框
                 draw.rectangle([rect_x, rect_y, rect_x + rect_w, rect_y + rect_h], outline="red", width=5)
-                # 畫出文字
-                draw.text((rect_x + 10, rect_y + 10), text_input, fill="red")
+                
+                # 2. 畫出文字 (嘗試載入預設字體)
+                try:
+                    font = ImageFont.truetype("arial.ttf", font_size)
+                except:
+                    font = ImageFont.load_default()
+                
+                draw.text((rect_x + 10, rect_y + 10), text_input, fill=text_color, font=font)
                 
                 st.session_state.result_img = img_draw
                 st.success("繪製完成！")
