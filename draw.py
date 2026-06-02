@@ -1,4 +1,4 @@
-# draw.py - v4.3.3.7 天啟畫廊 Streamlit 終極修正防撞版
+# draw.py - v4.3.3.8 天啟畫廊 Streamlit 終極精準重置版
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
@@ -32,7 +32,7 @@ def get_current_image():
             
     return Image.new("RGBA", (800, 600), (40, 40, 40, 255))
 
-# 先行取得底圖以得知基礎寬高
+# 先行取得真實底圖以得知基礎寬高
 current_bg = get_current_image()
 native_w, native_h = current_bg.width, current_bg.height
 
@@ -44,10 +44,11 @@ if "val_y" not in st.session_state:
 if "val_rot" not in st.session_state:
     st.session_state.val_rot = 0
 
-# 重置按鈕專用的回呼函式 (藉由直接清空或重置變數，避開 API 衝突)
+# 【核心修正】重置按鈕專用的回呼函式：直接動態讀取當前最真實的底圖寬高，絕不抓錯尺寸
 def reset_coords():
-    st.session_state.val_x = int(native_w // 2)
-    st.session_state.val_y = int(native_h // 2)
+    active_bg = get_current_image()
+    st.session_state.val_x = int(active_bg.width // 2)
+    st.session_state.val_y = int(active_bg.height // 2)
     st.session_state.val_rot = 0
 
 @st.cache_data
@@ -69,7 +70,7 @@ def load_cloud_font(font_size):
 # --- 側邊控制面板 ---
 with st.sidebar:
     # 置頂版號
-    st.caption("⚙️ 系統版本號：#v4.3.3.7")
+    st.caption("⚙️ 系統版本號：#v4.3.3.8")
     st.title("🔮 天啟畫廊")
     st.markdown("---")
     
@@ -90,7 +91,7 @@ with st.sidebar:
     
     font_size = st.slider("字體大小 (px):", min_value=10, max_value=300, value=80)
     
-    # 【核心修正】不使用拉桿自己的 key 綁定，而是用 value= 讀取 state，並用變數即時接住更動
+    # 讀取與即時回寫，確保滑桿與底層變數百分之百同步
     rotation = st.slider("旋轉角度 (度):", min_value=-180, max_value=180, value=st.session_state.val_rot)
     st.session_state.val_rot = rotation
     
@@ -100,7 +101,7 @@ with st.sidebar:
     pos_y = st.slider("垂直位置 (Y 軸):", min_value=0, max_value=native_h, value=st.session_state.val_y)
     st.session_state.val_y = pos_y
 
-    # 紅色重置按鈕：綁定專用回呼函式，按下去絕對不噴錯
+    # 紅色重置按鈕：綁定動態定位函式
     st.markdown(" ")
     st.button("↩ 重設定位與角度 (回正中央)", type="primary", use_container_width=True, on_click=reset_coords)
 
@@ -154,7 +155,7 @@ if HAS_COORDINATES:
         clicked_x = int(value["x"])
         clicked_y = int(value["y"])
         
-        # 【核心修正】點擊後直接更新真相來源變數，並觸發 rerun 刷新拉桿
+        # 點擊後直接更新真相來源變數，並觸發 rerun 重新渲染
         if clicked_x != st.session_state.val_x or clicked_y != st.session_state.val_y:
             st.session_state.val_x = max(0, min(native_w, clicked_x))
             st.session_state.val_y = max(0, min(native_h, clicked_y))
