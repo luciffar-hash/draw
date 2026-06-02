@@ -1,18 +1,18 @@
-# draw.py - Streamlit 網路公開穩定版 (承襲 v4.3.3.4 核心邏輯)
+# draw.py - Streamlit 雲端生產環境專用版 (解決字體與底圖缺失問題)
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 import os
 
 # 設定網頁標題與排版
-st.set_page_config(page_title="Inkscape 仿製網頁操控台 v4.3.3.4 (Streamlit)", layout="wide")
+st.set_page_config(page_title="Inkscape 仿製網頁操控台", layout="wide")
 
 # 初始化 Session State，用來記憶使用者上傳的底圖
 if "base_image" not in st.session_state:
     st.session_state.base_image = None
 
 def get_current_image():
-    """獲取當前底圖，若無則建立預設畫布"""
+    """獲取當前底圖，若無則建立預設畫布，確保雲端絕不噴錯"""
     if st.session_state.base_image is not None:
         return st.session_state.base_image.copy()
         
@@ -25,8 +25,8 @@ def get_current_image():
         except Exception:
             pass
             
-    # 預設畫布
-    return Image.new("RGBA", (800, 600), (30, 30, 30, 255))
+    # 如果雲端沒有 input.jpg，自動生成一個精美的 800x600 暗色畫布當背景，防止網頁死掉
+    return Image.new("RGBA", (800, 600), (40, 40, 40, 255))
 
 # 取得當前底圖以計算寬高
 current_bg = get_current_image()
@@ -41,15 +41,15 @@ with st.sidebar:
     # 1. 點擊自選底圖
     uploaded_file = st.file_uploader("🖼️ 選擇更換自訂底圖 (JPG / PNG)", type=["jpg", "jpeg", "png"])
     if uploaded_file is not None:
-        # 讀取並更新全域底圖快取
         new_img = Image.open(uploaded_file).convert("RGBA")
         if st.session_state.base_image is None or st.session_state.base_image.size != new_img.size or uploaded_file.name != st.session_state.get("last_uploaded_name", ""):
             st.session_state.base_image = new_img
             st.session_state.last_uploaded_name = uploaded_file.name
-            st.rerun() # 刷新頁面以更新拉桿最大值
+            st.rerun()
 
     # 2. 輸入文字内容
-    text_input = st.text_input("輸入文字内容:", value="貓貓abc", help="提示: 換行請打 \\n")
+    text_input = st.text_input("輸入文字内容:", value="貓貓abc")
+    st.caption("💡 提示：換行請打 \\n")
     
     # 3. 字體大小
     font_size = st.slider("字體大小 (px):", min_value=10, max_value=300, value=80)
@@ -60,17 +60,17 @@ with st.sidebar:
     # 5. 水平與垂直位置 (動態對應圖片寬高)
     pos_x = st.slider("水平位置 (X 軸):", min_value=0, max_value=native_w, value=native_w // 2)
     pos_y = st.slider("垂直位置 (Y 軸):", min_value=0, max_value=native_h, value=native_h // 2)
-    
-    st.markdown("---")
-    # 6. 儲存高品質產出檔
-    save_btn = st.button("💾 儲存高品質產出檔 (output.jpg)", use_container_width=True)
 
 # --- 主預覽區域 ---
-# 套用 v4.3.3.4 文字旋轉合成核心邏輯
+# 雲端字體安全相容邏輯：Linux 伺服器沒有 Windows 字體，若載入失敗自動切換為系統預設字體
 try:
     font = ImageFont.truetype("C:\\Windows\\Fonts\\msjh.ttc", font_size)
 except Exception:
-    font = ImageFont.load_default()
+    try:
+        # 嘗試載入 Linux 雲端常見的預設字體
+        font = ImageFont.load_default(size=font_size)
+    except Exception:
+        font = ImageFont.load_default()
 
 safe_text = str(text_input or "").replace("\\n", "\n")
 
@@ -110,12 +110,20 @@ final_image.paste(rotated_text, (paste_x, paste_y), mask=rotated_text)
 # 輸出 JPEG 格式
 output_img = final_image.convert("RGB")
 
-# 顯示即時預覽
 st.subheader("📷 即時預覽效果")
 st.image(output_img, use_container_width=True)
 
-# 處理儲存按鈕點擊事件
-if save_btn:
-    output_path = "output.jpg"
-    output_img.save(output_path, "JPEG", quality=95)
-    st.success(f"🎉 成功！高品質圖片已儲存至本機路徑：{os.path.abspath(output_path)}")
+st.markdown("---")
+
+# 雲端下載優化：將儲存按鈕改成網路專用的「下載按鈕」，直接下載到使用者的電腦或手機裡！
+buffered = BytesIO()
+output_img.save(buffered, format="JPEG", quality=95)
+img_bytes = buffered.getvalue()
+
+st.download_button(
+    label="📥 下載高品質產出檔 (output.jpg)",
+    data=img_bytes,
+    file_name="output.jpg",
+    mime="image/jpeg",
+    use_container_width=True
+)
