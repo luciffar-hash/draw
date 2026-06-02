@@ -1,4 +1,4 @@
-# draw.py - v4.3.3.6 天啟畫廊 Streamlit 終極版
+# draw.py - v4.3.3.7 天啟畫廊 Streamlit 終極修正防撞版
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
@@ -15,15 +15,10 @@ except ImportError:
 # 設定網頁標題與排版
 st.set_page_config(page_title="天啟畫廊 網頁操控台", layout="wide")
 
-# 初始化所有需要的 Session State 變數
-if "base_image" not in st.session_state:
-    st.session_state.base_image = None
-if "last_uploaded_name" not in st.session_state:
-    st.session_state.last_uploaded_name = ""
-
+# 1. 建立安全的底圖獲取機制
 def get_current_image():
     """獲取當前底圖，若無則建立預設畫布"""
-    if st.session_state.base_image is not None:
+    if "base_image" in st.session_state and st.session_state.base_image is not None:
         return st.session_state.base_image.copy()
         
     input_path = "input.jpg"
@@ -37,17 +32,23 @@ def get_current_image():
             
     return Image.new("RGBA", (800, 600), (40, 40, 40, 255))
 
-# 取得當前底圖以計算初始寬高
+# 先行取得底圖以得知基礎寬高
 current_bg = get_current_image()
 native_w, native_h = current_bg.width, current_bg.height
 
-# 初始化拉桿控制數值 (若不存在則給予預設中央值)
-if "slider_x" not in st.session_state:
-    st.session_state.slider_x = native_w // 2
-if "slider_y" not in st.session_state:
-    st.session_state.slider_y = native_h // 2
-if "slider_rot" not in st.session_state:
-    st.session_state.slider_rot = 0
+# 2. 初始化核心控制變數 (放在 state 中作為唯一真相來源)
+if "val_x" not in st.session_state:
+    st.session_state.val_x = int(native_w // 2)
+if "val_y" not in st.session_state:
+    st.session_state.val_y = int(native_h // 2)
+if "val_rot" not in st.session_state:
+    st.session_state.val_rot = 0
+
+# 重置按鈕專用的回呼函式 (藉由直接清空或重置變數，避開 API 衝突)
+def reset_coords():
+    st.session_state.val_x = int(native_w // 2)
+    st.session_state.val_y = int(native_h // 2)
+    st.session_state.val_rot = 0
 
 @st.cache_data
 def load_cloud_font(font_size):
@@ -67,44 +68,41 @@ def load_cloud_font(font_size):
 
 # --- 側邊控制面板 ---
 with st.sidebar:
-    # 依要求將版號以標籤與小字樣式完美置於控制台最上方
-    st.caption("⚙️ 系統版本號：#v4.3.3.6")
+    # 置頂版號
+    st.caption("⚙️ 系統版本號：#v4.3.3.7")
     st.title("🔮 天啟畫廊")
     st.markdown("---")
     
-    # 1. 點擊自選底圖
+    # 檔案上傳
     uploaded_file = st.file_uploader("🖼️ 選擇更換自訂底圖 (JPG / PNG)", type=["jpg", "jpeg", "png"])
     if uploaded_file is not None:
-        if uploaded_file.name != st.session_state.last_uploaded_name:
+        if "last_uploaded_name" not in st.session_state or uploaded_file.name != st.session_state.last_uploaded_name:
             new_img = Image.open(uploaded_file).convert("RGBA")
             st.session_state.base_image = new_img
             st.session_state.last_uploaded_name = uploaded_file.name
-            # 自動重設座標到新圖片中央
-            st.session_state.slider_x = new_img.width // 2
-            st.session_state.slider_y = new_img.height // 2
+            st.session_state.val_x = int(new_img.width // 2)
+            st.session_state.val_y = int(new_img.height // 2)
             st.rerun()
 
-    # 2. 輸入文字内容
+    # 文字輸入
     text_input = st.text_input("輸入文字内容:", value="貓貓abc")
     st.caption("💡 提示：換行請打 \\n")
     
-    # 3. 字體大小
     font_size = st.slider("字體大小 (px):", min_value=10, max_value=300, value=80)
     
-    # 4. 旋轉角度
-    rotation = st.slider("旋轉角度 (度):", min_value=-180, max_value=180, key="slider_rot")
+    # 【核心修正】不使用拉桿自己的 key 綁定，而是用 value= 讀取 state，並用變數即時接住更動
+    rotation = st.slider("旋轉角度 (度):", min_value=-180, max_value=180, value=st.session_state.val_rot)
+    st.session_state.val_rot = rotation
     
-    # 5. 水平與垂直位置 (動態對應當前底圖寬高)
-    pos_x = st.slider("水平位置 (X 軸):", min_value=0, max_value=native_w, key="slider_x")
-    pos_y = st.slider("垂直位置 (Y 軸):", min_value=0, max_value=native_h, key="slider_y")
+    pos_x = st.slider("水平位置 (X 軸):", min_value=0, max_value=native_w, value=st.session_state.val_x)
+    st.session_state.val_x = pos_x
+    
+    pos_y = st.slider("垂直位置 (Y 軸):", min_value=0, max_value=native_h, value=st.session_state.val_y)
+    st.session_state.val_y = pos_y
 
-    # 功能復活：紅色重置按鈕
+    # 紅色重置按鈕：綁定專用回呼函式，按下去絕對不噴錯
     st.markdown(" ")
-    if st.button("↩ 重設定位與角度 (回正中央)", type="primary", use_container_width=True):
-        st.session_state.slider_x = native_w // 2
-        st.session_state.slider_y = native_h // 2
-        st.session_state.slider_rot = 0
-        st.rerun()
+    st.button("↩ 重設定位與角度 (回正中央)", type="primary", use_container_width=True, on_click=reset_coords)
 
 # --- 主預覽區域處理與合成 ---
 font = load_cloud_font(font_size)
@@ -133,14 +131,14 @@ draw.multiline_text(
 )
 
 # 旋轉文字
-rotated_text = text_layer.rotate(rotation, resample=Image.Resampling.BICUBIC, expand=True)
+rotated_text = text_layer.rotate(st.session_state.val_rot, resample=Image.Resampling.BICUBIC, expand=True)
 
 # 合成圖片
 final_image = Image.new("RGBA", current_bg.size)
 final_image.paste(current_bg, (0, 0))
 
-paste_x = int(pos_x - (rotated_text.width / 2))
-paste_y = int(pos_y - (rotated_text.height / 2))
+paste_x = int(st.session_state.val_x - (rotated_text.width / 2))
+paste_y = int(st.session_state.val_y - (rotated_text.height / 2))
 final_image.paste(rotated_text, (paste_x, paste_y), mask=rotated_text)
 
 output_img = final_image.convert("RGB")
@@ -149,16 +147,17 @@ output_img = final_image.convert("RGB")
 st.subheader("📷 即時預覽效果")
 if HAS_COORDINATES:
     st.caption("💡 提示：除了拉桿，您也可以【直接點擊下方圖片】來改變文字位置！")
-    # 功能復活：捕捉圖片點擊座標
+    # 捕捉圖片點擊座標
     value = streamlit_image_coordinates(output_img, key="gallery_canvas", use_column_width=True)
     
     if value is not None:
         clicked_x = int(value["x"])
         clicked_y = int(value["y"])
         
-        if clicked_x != st.session_state.slider_x or clicked_y != st.session_state.slider_y:
-            st.session_state.slider_x = max(0, min(native_w, clicked_x))
-            st.session_state.slider_y = max(0, min(native_h, clicked_y))
+        # 【核心修正】點擊後直接更新真相來源變數，並觸發 rerun 刷新拉桿
+        if clicked_x != st.session_state.val_x or clicked_y != st.session_state.val_y:
+            st.session_state.val_x = max(0, min(native_w, clicked_x))
+            st.session_state.val_y = max(0, min(native_h, clicked_y))
             st.rerun()
 else:
     st.image(output_img, use_container_width=True)
