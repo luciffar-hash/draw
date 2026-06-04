@@ -1,4 +1,4 @@
-x
+import streamlit as st; st.title("網站建構中，敬請期待..."); st.progress(0.8); st.write("開發進度：80%"); st.stop()
 # draw.py - v4.3.3.9 天啟畫廊 畫布強固 800x600 終極版
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont
